@@ -73,7 +73,7 @@ export default function Home() {
                 ))}
               </div>
             </div>
-            <div className="mt-8 flex gap-3">
+            <div className="mt-8 flex justify-center gap-3">
               {loading ? (
                 <span className="text-sm text-zinc-400">Checking session…</span>
               ) : user ? (
@@ -184,3 +184,4 @@ export default function Home() {
     </div>
   );
 }
+
