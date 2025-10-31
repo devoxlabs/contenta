@@ -24,3 +24,107 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Custom UI helpers for dark theme interactions */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 0.375rem; /* rounded-md */
+  padding: 0.25rem 0.5rem; /* px-2 py-1 */
+  transition: transform .18s ease, border-color .18s ease, background-color .18s ease, opacity .18s ease;
+  cursor: pointer;
+}
+.btn-icon:hover { border-color: rgba(255,255,255,0.6); transform: translateY(-1px); }
+.btn-icon:active { transform: translateY(0); opacity: .9; }
+
+.fade-in { animation: fadeIn .24s ease both; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+
+.hover-rise { transition: transform .18s ease, box-shadow .18s ease; }
+.hover-rise:hover { transform: translateY(-2px); }
+
+.card-dark { background: #000; border: 1px solid rgba(255,255,255,0.15); border-radius: .5rem; }
+
+/* Page/tab transition */
+.fade-slide { animation: fadeSlide .28s ease both; }
+@keyframes fadeSlide { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: translateY(0);} }
+
+/* Active tab micro-pop */
+.active-tab { transition: background-color .2s ease, color .2s ease, box-shadow .2s ease; animation: tabPop .18s ease both; }
+@keyframes tabPop { from { transform: scale(.98);} to { transform: scale(1);} }
+
+/* Icon micro-animations for active tabs */
+.anim-spark { animation: sparkSpin .7s ease 1; }
+@keyframes sparkSpin { 0%{ transform: rotate(0) scale(1);} 50%{ transform: rotate(14deg) scale(1.12);} 100%{ transform: rotate(0) scale(1);} }
+.anim-clock { animation: clockTick .7s ease 1; }
+@keyframes clockTick { 0%{ transform: rotate(0);} 25%{ transform: rotate(-10deg);} 50%{ transform: rotate(10deg);} 100%{ transform: rotate(0);} }
+.anim-star { animation: starPop .6s ease 1; }
+@keyframes starPop { 0%{ transform: scale(.9);} 50%{ transform: scale(1.15);} 100%{ transform: scale(1);} }
+.anim-bulb { animation: bulbGlow .7s ease 1; }
+@keyframes bulbGlow { 0%{ transform: scale(.96); opacity:.9;} 50%{ transform: scale(1.06); opacity:1;} 100%{ transform: scale(1); opacity:1;} }
+.anim-gear { animation: gearSpin .8s ease 1; }
+@keyframes gearSpin { from { transform: rotate(0);} to { transform: rotate(180deg);} }
+
+/* Dot-matrix button font */
+.btn-dot { font-family: var(--font-dot), monospace; letter-spacing: .5px; }
+
+/* Landing page helpers */
+.divider { height: 1px; width: 100%; background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.18) 10%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.18) 90%, rgba(255,255,255,0) 100%); }
+
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+.reveal.show { opacity: 1; transform: translateY(0); }
+
+.card-hover { transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease; }
+.card-hover:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,.35); border-color: rgba(255,255,255,.25); }
+
+/* Password meter */
+.pw-meter { height: 10px; border-radius: 9999px; background: rgba(255,255,255,.08); overflow: hidden; border: 1px solid rgba(255,255,255,.12); }
+.pw-bar { height: 100%; width: 0%; background: linear-gradient(90deg,#ef4444,#f59e0b,#22c55e); transition: width .35s ease, opacity .35s ease; opacity:.9; }
+.pw-label { font-size: .8rem; letter-spacing: .3px; }
+
+/* Form labels in dot-matrix */
+.form-label { font-family: var(--font-dot), monospace; font-size: 1rem; letter-spacing: .4px; }
+
+/* Hamburger */
+.burger { width: 22px; height: 16px; position: relative; cursor: pointer; }
+.burger span { position: absolute; left: 0; right: 0; height: 2px; background: #fff; transition: transform .25s ease, opacity .25s ease; }
+.burger span:nth-child(1){ top:0; }
+.burger span:nth-child(2){ top:7px; }
+.burger span:nth-child(3){ bottom:0; }
+.burger.open span:nth-child(1){ transform: translateY(7px) rotate(45deg); }
+.burger.open span:nth-child(2){ opacity: 0; }
+.burger.open span:nth-child(3){ transform: translateY(-7px) rotate(-45deg); }
+
+.mobile-menu { position:absolute; right:1rem; top:3.25rem; background:#000; border:1px solid rgba(255,255,255,.15); border-radius:.5rem; padding:.5rem; box-shadow: 0 10px 30px rgba(0,0,0,.35); animation: fadeIn .18s ease both; }
+
+/* Glitch + cycling text for hero */
+.cycle-holder { position: relative; height: 3.6rem; overflow: hidden; }
+.hero-sub { font-size: 2rem; letter-spacing: .5px; line-height: 1.6; }
+
+/* New hero glitch block (one sentence at a time) */
+.hero-glitch { position: relative; display: inline-block; }
+.hero-glitch .gline { color:#fff; }
+.hero-glitch .gline:not(:first-child){ position:absolute; inset:0; }
+
+/* Clip sweep animation */
+@keyframes hglitchClip { from { clip-path: polygon(0 100%,100% 100%,100% 120%,0 120%);} to { clip-path: polygon(0 -20%,100% -20%,100% 0,0 0);} }
+/* Color/shift flicker */
+@keyframes hglitchShiftA { 0%,80%{ transform: translateX(0); color:#fff;} 85%{ transform: translateX(2px); color:#7dd3fc;} 90%{ transform: translateX(-2px); color:#fca5a5;} 95%{ transform: translateX(1px); color:#fff;} 100%{ transform: translateX(0);} }
+
+/* Stagger each overlay line */
+.hero-glitch .gline:nth-child(1){ animation: hglitchClip 2400ms linear infinite; }
+.hero-glitch .gline:nth-child(2){ animation: hglitchClip 2400ms -200ms linear infinite, hglitchShiftA 700ms -120ms linear infinite; }
+.hero-glitch .gline:nth-child(3){ animation: hglitchClip 2400ms -400ms linear infinite, hglitchShiftA 800ms -210ms linear infinite; }
+.hero-glitch .gline:nth-child(4){ animation: hglitchClip 2400ms -600ms linear infinite, hglitchShiftA 900ms -320ms linear infinite; }
+.hero-glitch .gline:nth-child(5){ animation: hglitchClip 2400ms -800ms linear infinite, hglitchShiftA 750ms -430ms linear infinite; }
+.hero-glitch .gline:nth-child(6){ animation: hglitchClip 2400ms -1000ms linear infinite, hglitchShiftA 820ms -520ms linear infinite; }
+.hero-glitch .gline:nth-child(7){ animation: hglitchClip 2400ms -1200ms linear infinite, hglitchShiftA 880ms -610ms linear infinite; }
+.hero-glitch .gline:nth-child(8){ animation: hglitchClip 2400ms -1400ms linear infinite, hglitchShiftA 760ms -700ms linear infinite; }
+
+/* Boot/Loading overlay */
+.boot-fade { animation: bootFadeIn .25s ease both; }
+@keyframes bootFadeIn { from { opacity: 0 } to { opacity: 1 } }
+.spin-slow { animation: spin 1.1s linear infinite; transform-origin: 50% 50%; }
+@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
