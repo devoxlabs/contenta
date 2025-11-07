@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { checkUsernameAvailable, getProfile, isValidUsername, reserveOrChangeUsername, saveProfile, suggestUsernames } from "@/lib/profile";
+import { checkUsernameAvailable, deriveUsernameFromEmail, getProfile, isValidUsername, reserveOrChangeUsername, saveProfile, suggestUsernames } from "@/lib/profile";
 
 export default function SettingsPanel() {
   const { user } = useAuth();
@@ -16,6 +16,7 @@ export default function SettingsPanel() {
   const [photoURL] = useState<string | undefined>(undefined);
   const [avatar, setAvatar] = useState<string>("");
   const [availability, setAvailability] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const currentUsername = useRef<string | undefined>(undefined);
 
@@ -38,6 +39,48 @@ export default function SettingsPanel() {
   }, [user]);
 
   // Avatar uploads removed (no storage)
+
+  // Auto-check username availability with debounce
+  useEffect(() => {
+    const u = username.trim();
+    setSuggestions([]);
+    if (!u) { setAvailability(null); setChecking(false); return; }
+    if (u === (currentUsername.current || "")) { setAvailability("Current username"); setChecking(false); return; }
+    if (!isValidUsername(u)) { setAvailability("Invalid format"); setChecking(false); return; }
+    setChecking(true);
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const free = await checkUsernameAvailable(u);
+        if (cancelled) return;
+        if (free) {
+          setAvailability("Available");
+          setSuggestions([]);
+        } else {
+          setAvailability("Taken");
+          const picks: string[] = [];
+          const baseFromEmail = deriveUsernameFromEmail(user?.email || "");
+          if (baseFromEmail) {
+            const tryList = [baseFromEmail];
+            for (let i = 1; i <= 10; i++) tryList.push(`${baseFromEmail}${i}`);
+            for (const cand of tryList) {
+              if (!isValidUsername(cand)) continue;
+              if (cand === u) continue;
+              const ok = await checkUsernameAvailable(cand);
+              if (cancelled) return;
+              if (ok) { picks.push(cand); break; }
+            }
+          }
+          const more = suggestUsernames(u);
+          const unique = Array.from(new Set([...picks, ...more])).slice(0, 5);
+          setSuggestions(unique);
+        }
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [username, user?.email]);
 
   const onCheck = async () => {
     if (!isValidUsername(username)) {
@@ -99,13 +142,14 @@ export default function SettingsPanel() {
 
       <div>
         <label className="block text-sm mb-1 form-label">Username</label>
-        <div className="flex gap-2">
-          <input value={username} onChange={(e)=>setUsername(e.target.value)} className="flex-1 border border-white/20 bg-black text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-white/30 transition" placeholder="your_name" />
-          <button onClick={onCheck} aria-label="check username" className="btn-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7" strokeWidth="1.5"/><path d="M20 20l-3-3" strokeWidth="1.5"/></svg>
-          </button>
+        <div>
+          <input value={username} onChange={(e)=>setUsername(e.target.value)} className="w-full border border-white/20 bg-black text-white rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-white/30 transition" placeholder="your_name" />
         </div>
-        {availability && <p className="text-xs mt-1 {availability==='Available'?'text-green-600':'text-red-600'}">{availability}</p>}
+        {(checking || availability) && (
+          <p className={`text-xs mt-1 ${availability === 'Available' ? 'text-white' : 'text-zinc-400'}`}>
+            {checking ? 'Checking…' : availability}
+          </p>
+        )}
         {suggestions.length>0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {suggestions.map((s)=> (
@@ -132,7 +176,7 @@ export default function SettingsPanel() {
 
       <div>
         <label className="block text-sm mb-2 form-label">Choose an avatar</label>
-        <div className="grid grid-cols-8 gap-2 max-w-xl">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-3 justify-items-center max-w-xl">
           {[1,2,3,4,5,6,7,8].map((n)=>{
             const src = `/avatars/${n}.png`;
             const active = avatar === src;
@@ -150,3 +194,4 @@ export default function SettingsPanel() {
     </section>
   );
 }
+

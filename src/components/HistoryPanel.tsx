@@ -38,46 +38,77 @@ export default function HistoryPanel() {
   const bullets = (arr: string[], md: boolean) => arr.map(v => `${md ? "-" : "•"} ${clean(v)}`).join("\n");
   const header = (text: string, level: number, md: boolean) => md ? `${"#".repeat(level)} ${text}` : text.toUpperCase();
 
-  const formatReadable = (rec: OutputRecord, f: "txt"|"md") => {
-    const md = f === "md";
+  const formatReadable = (rec: OutputRecord) => {
     const s: any = rec.structured;
     if (rec.mode === "generate" && s) {
       const parts: string[] = [];
-      if (s.captions?.length) parts.push(`${header("Captions", md ? 2 : 0, md)}`, bullets(s.captions, md), "");
+      if (s.captions?.length) parts.push(`${header("Captions", 0, false)}`, bullets(s.captions, false), "");
       if (s.script) {
-        parts.push(`${header("Short Video Script", md ? 2 : 0, md)}`);
-        if (s.script.title) parts.push(`${md ? "**Title:**" : "Title:"} ${clean(s.script.title)}`);
-        if (s.script.hook?.length) parts.push("", `${md ? "**Hook**" : "Hook"}`, bullets(s.script.hook, md));
-        if (s.script.body?.length) parts.push("", `${md ? "**Body**" : "Body"}`, bullets(s.script.body, md));
-        if (s.script.cta?.length) parts.push("", `${md ? "**Call to Action**" : "Call to Action"}`, bullets(s.script.cta, md));
+        parts.push(`${header("Short Video Script", 0, false)}`);
+        if (s.script.title) parts.push(`Title: ${clean(s.script.title)}`);
+        if (s.script.hook?.length) parts.push("", `Hook`, bullets(s.script.hook, false));
+        if (s.script.body?.length) parts.push("", `Body`, bullets(s.script.body, false));
+        if (s.script.cta?.length) parts.push("", `Call to Action`, bullets(s.script.cta, false));
       }
       return parts.join("\n");
     }
     if (rec.mode === "ideas" && s?.ideas?.length) {
-      const head = header("Ideas", md ? 2 : 0, md);
-      const list = s.ideas.map((it: any, i: number) => `${i + 1}. ${clean(it.title || "Idea")} — ${clean(it.hook || "")}${it.platform ? ` (${it.platform})` : ""}`).join("\n");
+      const head = header("Ideas", 0, false);
+      const list = s.ideas.map((it: any, i: number) => `${i + 1}. ${clean(it.title || "Idea")} – ${clean(it.hook || "")}${it.platform ? ` (${it.platform})` : ""}`).join("\n");
       return `${head}\n${list}`;
     }
     if (rec.mode === "enhance" && s?.variants?.length) {
-      const head = header("Enhanced Variants", md ? 2 : 0, md);
+      const head = header("Enhanced Variants", 0, false);
       const list = s.variants.map((v: string, i: number) => `${i + 1}. ${clean(v)}`).join("\n\n");
       return `${head}\n${list}`;
     }
     if (rec.mode === "vision" && s) {
       const parts: string[] = [];
-      if (s.captions?.length) parts.push(`${header("Captions", md ? 2 : 0, md)}`, bullets(s.captions, md), "");
-      if (s.ideas?.length) parts.push(`${header("Ideas", md ? 2 : 0, md)}`, bullets(s.ideas, md));
+      if (s.captions?.length) parts.push(`${header("Captions", 0, false)}`, bullets(s.captions, false), "");
+      if (s.ideas?.length) parts.push(`${header("Ideas", 0, false)}`, bullets(s.ideas, false));
       return parts.join("\n");
     }
     return rec.raw || "";
   };
 
-  const download = (rec: OutputRecord, format: "txt" | "md") => {
-    const name = `contenta_${rec.mode}_${new Date(rec.createdAt).toISOString().replace(/[:.]/g, "-")}.${format}`;
-    const content = rec.structured ? formatReadable(rec, format) : (rec.raw || "");
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const sanitizePlain = (s: string) => (s || "").replace(/[\*`#_>\|]/g, "").replace(/[\x00-\x1F\x7F-\uFFFF]/g, "").replace(/\s{2,}/g, " ").trim();
+
+  const makePdfBlob = (text: string) => {
+    const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const wrap = (t: string, max = 90) => { const out: string[] = []; let s = t; while (s.length > max) { let i = s.lastIndexOf(' ', max); if (i < max * 0.6) i = max; out.push(s.slice(0, i)); s = s.slice(i).trimStart(); } out.push(s); return out; };
+    const lines = text.split(/\r?\n/).flatMap(l => wrap(l)).map(esc);
+    const stream = `BT /F1 12 Tf 16 TL 50 780 Td (${lines.shift() || ""}) Tj` + lines.map(l=>` T* (${l}) Tj`).join("") + ` ET`;
+    const header = "%PDF-1.4\n";
+    let body = "";
+    const offs: number[] = [];
+    const add = (s: string) => { offs.push(header.length + body.length); body += s; };
+    add("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    add("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    add("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+    add(`4 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
+    add("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+    const xrefPos = header.length + body.length;
+    const xref = `xref\n0 6\n0000000000 65535 f \n${offs.map(o=>String(o).padStart(10,'0')+" 00000 n \n").join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+    const pdf = header + body + xref;
+    return new Blob([pdf], { type: 'application/pdf' });
+  };
+
+  const downloadPdf = (name: string, text: string) => {
+    const blob = makePdfBlob(text);
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const download = (rec: OutputRecord, format: "txt" | "pdf") => {
+    const base = rec.structured ? formatReadable(rec) : (rec.raw || "");
+    const content = sanitizePlain(base);
+    const ts = new Date(rec.createdAt).toISOString().replace(/[:.]/g, "-");
+    if (format === "pdf") {
+      downloadPdf(`contenta_${rec.mode}_${ts}.pdf`, content);
+    } else {
+      const url = URL.createObjectURL(new Blob([content.replace(/\n/g, '\r\n')], { type: 'text/plain;charset=utf-8' }));
+      const a = document.createElement('a'); a.href = url; a.download = `contenta_${rec.mode}_${ts}.txt`; a.click(); URL.revokeObjectURL(url);
+    }
   };
 
   return (
@@ -120,12 +151,7 @@ export default function HistoryPanel() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" strokeWidth="1.5"/></svg>
                   )}
                 </button>
-                <button onClick={()=>download(rec, "txt")} aria-label="download txt" className="btn-icon">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v10" strokeWidth="1.7"/><path d="M8 11l4 4 4-4" strokeWidth="1.7"/><rect x="4" y="19" width="16" height="2" rx="1"/></svg>
-                </button>
-                <button onClick={()=>download(rec, "md")} aria-label="download md" className="btn-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7v10h4l5-6 5 6h4V7" strokeWidth="1.5"/></svg>
-                </button>
+                {/* download buttons temporarily hidden */}
                 <button onClick={()=>{removeOutput(uid, rec.id); refresh();}} aria-label="delete" className="btn-icon">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18" strokeWidth="1.7"/><path d="M8 6V4h8v2" strokeWidth="1.7"/><rect x="6" y="6" width="12" height="14" rx="2"/></svg>
                 </button>
@@ -142,4 +168,7 @@ export default function HistoryPanel() {
     </section>
   );
 }
+
+
+
 

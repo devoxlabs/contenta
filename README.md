@@ -1,8 +1,12 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a [Next.js](https://nextjs.org) project.
+
+## Project Overview
+
+Contenta is a small dashboard that helps generate captions, ideas and scripts with a clean, privacy‑first setup. The app uses Firebase Auth and Firestore with owner‑only user documents and a lightweight local history so you can iterate quickly.
 
 ## Getting Started
 
-First, run the development server:
+Run the development server:
 
 ```bash
 npm run dev
@@ -14,11 +18,28 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Fonts are loaded via `next/font` for better performance.
+
+## Auth & Privacy (Quick Notes)
+
+- Sign‑in supports email with a “Remember me” option (local or session persistence).
+- Username reservations are public (for availability checks) but store only `{ uid, updatedAt }`.
+- User documents under `users/{uid}` are private (owner‑only) and may include email/PII.
+- Suggested Firestore rules enforce the above (see `firestore.rules`).
+
+## Local History
+
+Generated results are saved to local storage so you can revisit “Outputs”, “Recent”, and “Favorites” without relying on a backend.
+
+## Development Tips
+
+- Use Node 18+.
+- Start the app from the `web` directory if the repository is a monorepo.
+- Keep strings ASCII‑clean to avoid encoding issues on Windows editors.
 
 ## Learn More
 

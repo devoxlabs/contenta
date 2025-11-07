@@ -51,52 +51,58 @@ export default function GeneratorFormDark() {
     } finally { setLoading(false); }
   };
 
-  const downloadBlob = (filename: string, content: string) => { const blob = new Blob([content], { type: "text/plain;charset=utf-8" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); };
+  const downloadBlob = (filename: string, content: string) => { const blob = new Blob([content.replace(/\n/g, '\r\n')], { type: "text/plain;charset=utf-8" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); };
+  const sanitizePlain = (s: string) => (s || "").replace(/[\*`#_>|]/g, "").replace(/[\x00-\x1F\x7F-\uFFFF]/g, "").replace(/\s{2,}/g, " ").trim();
+  const makePdfBlob = (text: string) => {
+    const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const wrap = (t: string, max = 90) => { const out: string[] = []; let s = t; while (s.length > max) { let i = s.lastIndexOf(' ', max); if (i < max * 0.6) i = max; out.push(s.slice(0, i)); s = s.slice(i).trimStart(); } out.push(s); return out; };
+    const lines = text.split(/\r?\n/).flatMap(l => wrap(l)).map(esc);
+    const stream = `BT /F1 12 Tf 16 TL 50 780 Td (${lines.shift() || ""}) Tj` + lines.map(l=>` T* (${l}) Tj`).join("") + ` ET`;
+    const header = "%PDF-1.4\n"; let body=""; const offs:number[]=[]; const add=(s:string)=>{offs.push(header.length+body.length); body+=s;};
+    add("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    add("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    add("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+    add(`4 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
+    add("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+    const xrefPos = header.length + body.length;
+    const xref = `xref\n0 6\n0000000000 65535 f \n${offs.map(o=>String(o).padStart(10,'0')+" 00000 n \n").join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+    return new Blob([header+body+xref], { type: 'application/pdf' });
+  };
 
-  const bullets = (arr: string[], md: boolean) => arr.map(v => `${md ? "-" : "•"} ${cleanText(v)}`).join("\n");
+  const bullets = (arr: string[], md: boolean) => arr.map(v => `- ${cleanText(v)}`).join("\n");
   const header = (text: string, level: number, md: boolean) => md ? `${"#".repeat(level)} ${text}` : text.toUpperCase();
 
-  const formatReadable = (s: any, m: string, f: "txt"|"md") => {
-    const md = f === "md";
+  const formatReadable = (s: any, m: string) => {
     if (m === "generate" && s) {
       const parts: string[] = [];
-      if (s.captions?.length) {
-        parts.push(`${header("Captions", md ? 2 : 0, md)}`, bullets(s.captions, md), "");
-      }
+      if (s.captions?.length) { parts.push(`${header("Captions", 0, false)}`, bullets(s.captions, false), ""); }
       if (s.script) {
-        parts.push(`${header("Short Video Script", md ? 2 : 0, md)}`);
-        if (s.script.title) parts.push(`${md ? "**Title:**" : "Title:"} ${cleanText(s.script.title)}`);
-        if (s.script.hook?.length) {
-          parts.push("", `${md ? "**Hook**" : "Hook"}`, bullets(s.script.hook, md));
-        }
-        if (s.script.body?.length) {
-          parts.push("", `${md ? "**Body**" : "Body"}`, bullets(s.script.body, md));
-        }
-        if (s.script.cta?.length) {
-          parts.push("", `${md ? "**Call to Action**" : "Call to Action"}`, bullets(s.script.cta, md));
-        }
+        parts.push(`${header("Short Video Script", 0, false)}`);
+        if (s.script.title) parts.push(`Title: ${cleanText(s.script.title)}`);
+        if (s.script.hook?.length) { parts.push("", `Hook`, bullets(s.script.hook, false)); }
+        if (s.script.body?.length) { parts.push("", `Body`, bullets(s.script.body, false)); }
+        if (s.script.cta?.length) { parts.push("", `Call to Action`, bullets(s.script.cta, false)); }
       }
       return parts.join("\n");
     }
     if (m === "ideas" && s?.ideas?.length) {
-      const mdTitle = header("Ideas", md ? 2 : 0, md);
-      const list = s.ideas.map((it: any, i: number) => `${i + 1}. ${cleanText(it.title || "Idea")} — ${cleanText(it.hook || "")}${it.platform ? ` (${it.platform})` : ""}`).join("\n");
-      return `${mdTitle}\n${list}`;
+      const t = header("Ideas", 0, false);
+      const list = s.ideas.map((it: any, i: number) => `${i + 1}. ${cleanText(it.title || "Idea")} - ${cleanText(it.hook || "")}${it.platform ? ` (${it.platform})` : ""}`).join("\n");
+      return `${t}\n${list}`;
     }
     if (m === "enhance" && s?.variants?.length) {
-      const mdTitle = header("Enhanced Variants", md ? 2 : 0, md);
+      const t = header("Enhanced Variants", 0, false);
       const list = s.variants.map((v: string, i: number) => `${i + 1}. ${cleanText(v)}`).join("\n\n");
-      return `${mdTitle}\n${list}`;
+      return `${t}\n${list}`;
     }
-    // fallback
     return typeof s === 'string' ? s : JSON.stringify(s ?? {}, null, 2);
   };
 
-  const formatForDownload = (s: any | undefined, raw: string, m: string, f: "txt"|"md") => {
-    if (s) return formatReadable(s, m, f);
+  const formatForDownload = (s: any | undefined, raw: string, m: string) => {
+    if (s) return formatReadable(s, m);
     return raw;
   };
-  const download = (format: "txt" | "md") => { const raw = outputs?.[0]?.content ? cleanText(outputs[0].content) : ""; const content = formatForDownload(structured as any, raw, mode, format); const name = `contenta_${mode}_${new Date().toISOString().replace(/[:.]/g, "-")}.${format}`; downloadBlob(name, content); };
+  const download = (format: "txt" | "pdf") => { const raw = outputs?.[0]?.content ? cleanText(outputs[0].content) : ""; const base = formatForDownload(structured as any, raw, mode); const content = sanitizePlain(base); const ts = new Date().toISOString().replace(/[:.]/g, "-"); if (format==='pdf'){ const blob = makePdfBlob(content); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`contenta_${mode}_${ts}.pdf`; a.click(); URL.revokeObjectURL(url);} else { downloadBlob(`contenta_${mode}_${ts}.txt`, content); } };
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 text-white">
@@ -134,10 +140,10 @@ export default function GeneratorFormDark() {
         </div>
         <div>
           <label className="block text-sm mb-1 form-label">Text / Topic</label>
-          <textarea value={text} onChange={(e)=>setText(e.target.value)} required rows={6} placeholder="Enter topic or paste text…" className="w-full border border-white/20 bg-black text-white placeholder:text-zinc-500 rounded-md px-3 py-2 hover-rise focus:outline-none focus:ring-2 focus:ring-white/30" />
+          <textarea value={text} onChange={(e)=>setText(e.target.value)} required rows={6} placeholder="Enter topic or paste text..." className="w-full border border-white/20 bg-black text-white placeholder:text-zinc-500 rounded-md px-3 py-2 hover-rise focus:outline-none focus:ring-2 focus:ring-white/30" />
         </div>
         {error && <p className="text-sm text-red-500">{error}</p>}
-        <button disabled={loading} className="px-4 py-2 rounded-md bg-white text-black disabled:opacity-60 cursor-pointer hover:bg-white/90 active:scale-95 transition btn-dot">{loading ? "Generating…" : "Generate"}</button>
+        <button disabled={loading} className="px-4 py-2 rounded-md bg-white text-black disabled:opacity-60 cursor-pointer hover:bg-white/90 active:scale-95 transition btn-dot">{loading ? "Generating..." : "Generate"}</button>
       </form>
 
       <div>
@@ -152,12 +158,7 @@ export default function GeneratorFormDark() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" strokeWidth="1.5"/></svg>
                 )}
               </button>
-              <button disabled={!lastId} onClick={()=>download("txt")} aria-label="download txt" className="btn-icon disabled:opacity-60">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v10" strokeWidth="1.7"/><path d="M8 11l4 4 4-4" strokeWidth="1.7"/><rect x="4" y="19" width="16" height="2" rx="1"/></svg>
-              </button>
-              <button disabled={!lastId} onClick={()=>download("md")} aria-label="download md" className="btn-icon disabled:opacity-60">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7v10h4l5-6 5 6h4V7" strokeWidth="1.5"/></svg>
-              </button>
+              {/* download buttons temporarily hidden */}
                 </div>
               ) : null}
             </div>
@@ -232,3 +233,9 @@ export default function GeneratorFormDark() {
     </div>
   );
 }
+
+
+
+
+
+

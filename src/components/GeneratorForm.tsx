@@ -71,11 +71,18 @@ export default function GeneratorForm() {
     }
   };
 
-  const download = (format: "txt" | "md") => {
+  const download = (format: "txt" | "pdf") => {
     const raw = outputs?.[0]?.content ? cleanText(outputs[0].content) : "";
-    const content = formatForDownload(structured as any, raw, mode, format);
-    const name = `contenta_${mode}_${new Date().toISOString().replace(/[:.]/g, "-")}.${format}`;
-    downloadBlob(name, content);
+    const base = formatReadable(structured as any, mode, raw);
+    const content = sanitizePlain(base);
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    if (format === "pdf") {
+      const blob = makePdfBlob(content);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `contenta_${mode}_${ts}.pdf`; a.click(); URL.revokeObjectURL(url);
+    } else {
+      downloadBlob(`contenta_${mode}_${ts}.txt`, content.replace(/\n/g, "\r\n"));
+    }
   };
 
   return (
@@ -114,11 +121,11 @@ export default function GeneratorForm() {
         </div>
         <div>
           <label className="block text-sm mb-1">Text / Topic</label>
-          <textarea value={text} onChange={(e)=>setText(e.target.value)} required rows={6} placeholder="Enter topic or paste text�" className="w-full border rounded-md px-3 py-2" />
+          <textarea value={text} onChange={(e)=>setText(e.target.value)} required rows={6} placeholder="Enter topic or paste text..." className="w-full border rounded-md px-3 py-2" />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button disabled={loading} className="px-4 py-2 rounded-md bg-black text-white disabled:opacity-60">
-          {loading ? "Generating…" : "Generate"}
+          {loading ? "Generating..." : "Generate"}
         </button>
       </form>
       <div>
@@ -130,17 +137,8 @@ export default function GeneratorForm() {
                 disabled={!lastId}
                 onClick={()=>{ if(!lastId) return; const t = toggleFavorite(uid, lastId); setIsFav(!!t?.favorite); }}
                 className="text-xs px-2 py-1 border rounded disabled:opacity-60"
-              >{isFav? "★ Favorited" : "☆ Favorite"}</button>
-              <button
-                disabled={!lastId}
-                onClick={()=>download("txt")}
-                className="text-xs px-2 py-1 border rounded disabled:opacity-60"
-              >TXT</button>
-              <button
-                disabled={!lastId}
-                onClick={()=>download("md")}
-                className="text-xs px-2 py-1 border rounded disabled:opacity-60"
-              >MD</button>
+              >{isFav? "Favorited" : "Favorite"}</button>
+              {/* download buttons temporarily hidden */}
             </div>
           ) : null}
         </div>
@@ -237,11 +235,58 @@ function downloadBlob(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
-function formatForDownload(structured: any | undefined, raw: string, mode: string, format: "txt"|"md") {
-  if (structured) {
-    const body = JSON.stringify(structured, null, 2);
-    if (format === "md") return `# ${mode}\n\n\n${"```"}json\n${body}\n${"```"}\n`;
-    return body;
+function sanitizePlain(s: string) {
+  return (s || "")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/[\t ]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function formatReadable(structured: any | undefined, mode: string, raw: string) {
+  if (!structured) return raw;
+  const s: any = structured;
+  const bullets = (arr: string[]) => arr.map(v => `- ${v}`).join("\n");
+  const parts: string[] = [];
+  if (mode === "generate") {
+    if (s.captions?.length) parts.push("Captions", bullets(s.captions), "");
+    if (s.script) {
+      parts.push("Short Video Script");
+      if (s.script.title) parts.push(`Title: ${s.script.title}`);
+      if (s.script.hook?.length) parts.push("", "Hook", bullets(s.script.hook));
+      if (s.script.body?.length) parts.push("", "Body", bullets(s.script.body));
+      if (s.script.cta?.length) parts.push("", "Call to Action", bullets(s.script.cta));
+    }
+    return parts.join("\n");
+  }
+  if (mode === "ideas" && s?.ideas?.length) {
+    const list = s.ideas.map((it: any, i: number) => `${i + 1}. ${it.title || "Idea"} - ${it.hook || ""}${it.platform ? ` (${it.platform})` : ""}`).join("\n");
+    return `Ideas\n${list}`;
+  }
+  if (mode === "enhance" && s?.variants?.length) {
+    const list = s.variants.map((v: string, i: number) => `${i + 1}. ${v}`).join("\n\n");
+    return `Enhanced Variants\n${list}`;
   }
   return raw;
+}
+
+function makePdfBlob(text: string) {
+  const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  const wrap = (t: string, max = 90) => {
+    const out: string[] = []; let s = t;
+    while (s.length > max) { let i = s.lastIndexOf(' ', max); if (i < max * 0.6) i = max; out.push(s.slice(0, i)); s = s.slice(i).trimStart(); }
+    out.push(s); return out;
+  };
+  const lines = text.split(/\r?\n/).flatMap(l => wrap(l)).map(esc);
+  const stream = `BT /F1 12 Tf 16 TL 50 780 Td (${lines.shift() || ""}) Tj` + lines.map(l=>` T* (${l}) Tj`).join("") + ` ET`;
+  const header = "%PDF-1.4\n";
+  let body = ""; const offs: number[] = []; const add = (s: string) => { offs.push(header.length + body.length); body += s; };
+  add("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  add("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+  add("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+  add(`4 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
+  add("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+  const xrefPos = header.length + body.length;
+  const xref = `xref\n0 6\n0000000000 65535 f \n${offs.map(o=>String(o).padStart(10,'0')+" 00000 n \n").join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+  return new Blob([header + body + xref], { type: 'application/pdf' });
 }

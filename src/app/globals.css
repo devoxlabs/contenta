@@ -25,6 +25,10 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Ensure all buttons show pointer cursor; disabled show not-allowed */
+button { cursor: pointer; }
+button[disabled], button:disabled { cursor: not-allowed; }
+
 /* Custom UI helpers for dark theme interactions */
 .btn-icon {
   display: inline-flex;

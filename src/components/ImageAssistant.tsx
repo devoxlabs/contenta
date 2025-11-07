@@ -79,16 +79,36 @@ export default function ImageAssistant({ platform, style }: { platform: string; 
     }
   };
 
-  const download = (format: "txt" | "md") => {
-    const md = format === "md";
-    const header = (text: string, level: number) => md ? `${"#".repeat(level)} ${text}` : text.toUpperCase();
-    const bullets = (arr: string[]) => arr.map(v => `${md ? "-" : "•"} ${v}`).join("\n");
+  const sanitizePlain = (s: string) => (s || "").replace(/[\*`#_>\|]/g, "").replace(/[\x00-\x1F\x7F-\uFFFF]/g, "").replace(/\s{2,}/g, " ").trim();
+  const makePdfBlob = (text: string) => {
+    const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const wrap = (t: string, max = 90) => { const out: string[] = []; let s = t; while (s.length > max) { let i = s.lastIndexOf(' ', max); if (i < max * 0.6) i = max; out.push(s.slice(0, i)); s = s.slice(i).trimStart(); } out.push(s); return out; };
+    const lines = text.split(/\r?\n/).flatMap(l => wrap(l)).map(esc);
+    const stream = `BT /F1 12 Tf 16 TL 50 780 Td (${lines.shift() || ""}) Tj` + lines.map(l=>` T* (${l}) Tj`).join("") + ` ET`;
+    const header = "%PDF-1.4\n"; let body=""; const offs:number[]=[]; const add=(s:string)=>{offs.push(header.length+body.length); body+=s;};
+    add("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    add("2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+    add("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+    add(`4 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
+    add("5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n");
+    const xrefPos = header.length + body.length;
+    const xref = `xref\n0 6\n0000000000 65535 f \n${offs.map(o=>String(o).padStart(10,'0')+" 00000 n \n").join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefPos}\n%%EOF`;
+    return new Blob([header+body+xref], { type: 'application/pdf' });
+  };
+  const download = (format: "txt" | "pdf") => {
+    const header = (text: string) => text.toUpperCase();
+    const bullets = (arr: string[]) => arr.map(v => `• ${v}`).join("\n");
     const parts: string[] = [];
-    if (captions.length) parts.push(`${header("Captions", md ? 2 : 0)}`, bullets(captions), "");
-    if (ideas.length) parts.push(`${header("Ideas", md ? 2 : 0)}`, bullets(ideas));
-    const content = parts.join("\n");
-    const name = `contenta_vision_${new Date().toISOString().replace(/[:.]/g, "-")}.${format}`;
-    downloadBlob(name, content);
+    if (captions.length) parts.push(`${header("Captions")}`, bullets(captions), "");
+    if (ideas.length) parts.push(`${header("Ideas")}`, bullets(ideas));
+    const content = sanitizePlain(parts.join("\n"));
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    if (format === 'pdf') {
+      const blob = makePdfBlob(content);
+      const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`contenta_vision_${ts}.pdf`; a.click(); URL.revokeObjectURL(url);
+    } else {
+      downloadBlob(`contenta_vision_${ts}.txt`, content);
+    }
   };
 
   return (
@@ -127,12 +147,7 @@ export default function ImageAssistant({ platform, style }: { platform: string; 
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" strokeWidth="1.5"/></svg>
           )}
         </button>
-        <button disabled={!captions.length && !ideas.length} onClick={()=>download("txt")} aria-label="download txt" className="btn-icon disabled:opacity-60">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v10" strokeWidth="1.7"/><path d="M8 11l4 4 4-4" strokeWidth="1.7"/><rect x="4" y="19" width="16" height="2" rx="1"/></svg>
-        </button>
-        <button disabled={!captions.length && !ideas.length} onClick={()=>download("md")} aria-label="download md" className="btn-icon disabled:opacity-60">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7v10h4l5-6 5 6h4V7" strokeWidth="1.5"/></svg>
-        </button>
+        {/* download buttons temporarily hidden */}
         {previewUrl && (
           <button onClick={()=>{setPreviewUrl(null); setCaptions([]); setIdeas([]);}} aria-label="clear" className="btn-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 6h18" strokeWidth="1.7"/><path d="M8 6V4h8v2" strokeWidth="1.7"/><rect x="6" y="6" width="12" height="14" rx="2"/></svg>
@@ -183,7 +198,7 @@ function UploadIcon() {
 }
 
 function downloadBlob(filename: string, content: string) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const blob = new Blob([content.replace(/\n/g, '\r\n')], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename; a.click();
@@ -198,3 +213,6 @@ function formatForDownload(structured: any | undefined, raw: string, mode: strin
   }
   return raw;
 }
+
+
+
